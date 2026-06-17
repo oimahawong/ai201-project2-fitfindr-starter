@@ -18,7 +18,13 @@ Usage (once implemented):
     print(result["error"])   # None on success
 """
 
+import re
+
+from dotenv import load_dotenv
+
 from tools import search_listings, suggest_outfit, create_fit_card
+
+load_dotenv()
 
 
 # ── session state ─────────────────────────────────────────────────────────────
@@ -92,9 +98,56 @@ def run_agent(query: str, wardrobe: dict) -> dict:
     Before writing code, complete the Planning Loop and State Management sections
     of planning.md — your implementation should match what you described there.
     """
-    # TODO: implement the planning loop
+    # Step 1: Initialize session
     session = _new_session(query, wardrobe)
-    session["error"] = "Planning loop not yet implemented."
+
+    # Step 2: Parse query — extract price, size, and description via regex
+    price_match = re.search(r'\$\s*(\d+(?:\.\d+)?)', query)
+    max_price = float(price_match.group(1)) if price_match else None
+
+    size_match = re.search(
+        r'\b(?:size\s*)?([XS|XL|XXL|S|M|L]|size\s*\d+|\d+)\b',
+        query,
+        re.IGNORECASE,
+    )
+    size = size_match.group(1).strip() if size_match else None
+
+    session["parsed"] = {
+        "description": query,
+        "size": size,
+        "max_price": max_price,
+    }
+
+    # Step 3: Search listings
+    session["search_results"] = search_listings(
+        description=session["parsed"]["description"],
+        size=session["parsed"]["size"],
+        max_price=session["parsed"]["max_price"],
+    )
+
+    if not session["search_results"]:
+        session["error"] = (
+            "No listings matched your search. Try different keywords, "
+            "remove the size filter, or raise your price ceiling."
+        )
+        return session
+
+    # Step 4: Select top result
+    session["selected_item"] = session["search_results"][0]
+
+    # Step 5: Suggest outfit
+    session["outfit_suggestion"] = suggest_outfit(
+        session["selected_item"],
+        session["wardrobe"],
+    )
+
+    # Step 6: Create fit card
+    session["fit_card"] = create_fit_card(
+        session["outfit_suggestion"],
+        session["selected_item"],
+    )
+
+    # Step 7: Return session
     return session
 
 
@@ -121,4 +174,3 @@ if __name__ == "__main__":
         wardrobe=get_example_wardrobe(),
     )
     print(f"Error message: {session2['error']}")
-# hello world
